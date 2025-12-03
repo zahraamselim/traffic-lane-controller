@@ -1,0 +1,160 @@
+{
+  "version": 1,
+  "author": "Traffic Management System",
+  "editor": "wokwi",
+  "parts": [
+    {
+      "type": "wokwi-esp32-devkit-v1",
+      "id": "esp",
+      "top": 0,
+      "left": 0,
+      "attrs": {}
+    },
+    {
+      "type": "wokwi-breadboard",
+      "id": "bb1",
+      "top": -100,
+      "left": 200,
+      "attrs": { "rows": "30", "cols": "60" }
+    },
+    {
+      "type": "wokwi-pir-motion-sensor",
+      "id": "ir1",
+      "top": -50,
+      "left": 400,
+      "attrs": { "label": "IR Sensor IN" }
+    },
+    {
+      "type": "wokwi-pir-motion-sensor",
+      "id": "ir2",
+      "top": 50,
+      "left": 400,
+      "attrs": { "label": "IR Sensor OUT" }
+    },
+    {
+      "type": "wokwi-lcd1602",
+      "id": "lcd",
+      "top": 200,
+      "left": 400,
+      "attrs": { "pins": "i2c" }
+    },
+    {
+      "type": "wokwi-servo",
+      "id": "servo",
+      "top": -50,
+      "left": 600,
+      "attrs": {}
+    },
+    {
+      "type": "wokwi-buzzer",
+      "id": "buzzer",
+      "top": 100,
+      "left": 600,
+      "attrs": {}
+    },
+    {
+      "type": "wokwi-led",
+      "id": "led1",
+      "top": 200,
+      "left": 200,
+      "attrs": { "color": "red" }
+    },
+    {
+      "type": "wokwi-led",
+      "id": "led2",
+      "top": 240,
+      "left": 200,
+      "attrs": { "color": "red" }
+    },
+    {
+      "type": "wokwi-led",
+      "id": "led3",
+      "top": 280,
+      "left": 200,
+      "attrs": { "color": "red" }
+    },
+    {
+      "type": "wokwi-led",
+      "id": "led4",
+      "top": 320,
+      "left": 200,
+      "attrs": { "color": "red" }
+    },
+    {
+      "type": "wokwi-resistor",
+      "id": "r1",
+      "top": 200,
+      "left": 250,
+      "attrs": { "value": "220" }
+    },
+    {
+      "type": "wokwi-resistor",
+      "id": "r2",
+      "top": 240,
+      "left": 250,
+      "attrs": { "value": "220" }
+    },
+    {
+      "type": "wokwi-resistor",
+      "id": "r3",
+      "top": 280,
+      "left": 250,
+      "attrs": { "value": "220" }
+    },
+    {
+      "type": "wokwi-resistor",
+      "id": "r4",
+      "top": 320,
+      "left": 250,
+      "attrs": { "value": "220" }
+    },
+    {
+      "type": "wokwi-resistor",
+      "id": "r5",
+      "top": 100,
+      "left": 650,
+      "attrs": { "value": "100", "label": "Buzzer R" }
+    }
+  ],
+  "connections": [
+    ["esp:GND.1", "bb1:bn.1", "black", ["h0"]],
+    ["esp:3V3", "bb1:bp.1", "red", ["h0"]],
+
+    ["ir1:VCC", "bb1:bp.5", "red", ["v0"]],
+    ["ir1:GND", "bb1:bn.5", "black", ["v0"]],
+    ["ir1:OUT", "esp:GPIO34", "green", ["v0"]],
+
+    ["ir2:VCC", "bb1:bp.10", "red", ["v0"]],
+    ["ir2:GND", "bb1:bn.10", "black", ["v0"]],
+    ["ir2:OUT", "esp:GPIO35", "green", ["v0"]],
+
+    ["lcd:VCC", "bb1:bp.15", "red", ["v0"]],
+    ["lcd:GND", "bb1:bn.15", "black", ["v0"]],
+    ["lcd:SDA", "esp:GPIO21", "blue", ["v0"]],
+    ["lcd:SCL", "esp:GPIO22", "yellow", ["v0"]],
+
+    ["servo:V+", "bb1:bp.20", "red", ["v0"]],
+    ["servo:GND", "bb1:bn.20", "black", ["v0"]],
+    ["servo:PWM", "esp:GPIO13", "orange", ["v0"]],
+
+    ["buzzer:1", "r5:1", "green", ["v0"]],
+    ["r5:2", "esp:GPIO12", "green", ["v0"]],
+    ["buzzer:2", "bb1:bn.25", "black", ["v0"]],
+
+    ["led1:A", "r1:1", "red", ["v0"]],
+    ["r1:2", "esp:GPIO14", "red", ["v0"]],
+    ["led1:C", "bb1:bn.30", "black", ["v0"]],
+
+    ["led2:A", "r2:1", "red", ["v0"]],
+    ["r2:2", "esp:GPIO27", "red", ["v0"]],
+    ["led2:C", "bb1:bn.35", "black", ["v0"]],
+
+    ["led3:A", "r3:1", "red", ["v0"]],
+    ["r3:2", "esp:GPIO26", "red", ["v0"]],
+    ["led3:C", "bb1:bn.40", "black", ["v0"]],
+
+    ["led4:A", "r4:1", "red", ["v0"]],
+    ["r4:2", "esp:GPIO25", "red", ["v0"]],
+    ["led4:C", "bb1:bn.45", "black", ["v0"]]
+  ]
+}
