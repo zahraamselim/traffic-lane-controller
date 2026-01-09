@@ -4,158 +4,199 @@
 #include <LiquidCrystal.h>
 #include <ESP32Servo.h>
 
+// WiFi Configuration
 const char* ssid = "YOUR_WIFI_SSID";
 const char* password = "YOUR_WIFI_PASSWORD";
 const char* serverUrl = "http://YOUR_SERVER_IP:5000/predict";
 
-const int BTN_IN = 16;
-const int BTN_OUT = 17;
-const int SERVO = 5;
-const int BUZZER = 23;
-const int LEDS[] = {2, 4, 12, 13};
+// Hardware Pins
+const int IR_SENSOR_IN = 34;
+const int IR_SENSOR_OUT = 35;
+const int SERVO_PIN = 13;
+const int BUZZER_PIN = 12;
+const int LED_PINS[] = {14, 27, 26, 25};
 
+// LCD Pins
+const int RS = 19;
+const int E = 23;
+const int D4 = 18;
+const int D5 = 17;
+const int D6 = 16;
+const int D7 = 15;
+
+// Timing Settings
 const unsigned long STEP_INTERVAL = 5000;
 const unsigned long STRIDE_INTERVAL = 15000;
 const unsigned long WINDOW_SIZE = 60000;
+const byte POINTS_PER_WINDOW = 12;
 
-const byte POINTS_PER_WINDOW = WINDOW_SIZE / STEP_INTERVAL;
-const byte POINTS_PER_STRIDE = STRIDE_INTERVAL / STEP_INTERVAL;
-
-LiquidCrystal lcd(14, 27, 26, 25, 33, 32);
+// Objects
+LiquidCrystal lcd(RS, E, D4, D5, D6, D7);
 Servo servo;
 
-int traffic[POINTS_PER_WINDOW];
+// Variables
+int traffic[12];
 byte idx = 0;
-int count = 0;
-int totalCount = 0;
+int currentCount = 0;
+int totalVehicles = 0;
 bool gateOpen = false;
 
 unsigned long lastSave = 0;
 unsigned long lastDecision = 0;
-unsigned long decisionStart = 0;
-bool deciding = false;
+unsigned long lastDisplay = 0;
 
-bool lastIn = LOW;
-bool lastOut = LOW;
+bool lastInState = HIGH;
+bool lastOutState = HIGH;
 unsigned long lastInTime = 0;
 unsigned long lastOutTime = 0;
 
 void setup() {
   Serial.begin(115200);
+  delay(1000);
   
-  pinMode(BTN_IN, INPUT);
-  pinMode(BTN_OUT, INPUT);
-  pinMode(BUZZER, OUTPUT);
+  pinMode(IR_SENSOR_IN, INPUT);
+  pinMode(IR_SENSOR_OUT, INPUT);
+  pinMode(BUZZER_PIN, OUTPUT);
   
-  for(byte i = 0; i < 4; i++) {
-    pinMode(LEDS[i], OUTPUT);
-    digitalWrite(LEDS[i], LOW);
+  for(int i = 0; i < 4; i++) {
+    pinMode(LED_PINS[i], OUTPUT);
+    digitalWrite(LED_PINS[i], LOW);
   }
   
-  servo.attach(SERVO);
+  servo.attach(SERVO_PIN);
   servo.write(0);
   
   lcd.begin(16, 2);
   lcd.print("Traffic System");
   lcd.setCursor(0, 1);
-  lcd.print("Starting...");
+  lcd.print("Connecting WiFi");
   
+  Serial.println("Connecting to WiFi");
   WiFi.begin(ssid, password);
-  Serial.print("Connecting WiFi");
   
-  while (WiFi.status() != WL_CONNECTED) {
+  int attempts = 0;
+  while (WiFi.status() != WL_CONNECTED && attempts < 40) {
     delay(500);
     Serial.print(".");
+    attempts++;
   }
   
-  Serial.println("\nWiFi connected");
-  Serial.print("IP: ");
-  Serial.println(WiFi.localIP());
+  if(WiFi.status() == WL_CONNECTED) {
+    Serial.println("\nWiFi connected");
+    Serial.print("IP: ");
+    Serial.println(WiFi.localIP());
+    
+    lcd.clear();
+    lcd.print("WiFi Connected");
+    lcd.setCursor(0, 1);
+    lcd.print(WiFi.localIP());
+    delay(2000);
+  } else {
+    Serial.println("\nWiFi failed");
+    lcd.clear();
+    lcd.print("WiFi Failed");
+    delay(3000);
+  }
+  
+  for(int i = 0; i < 12; i++) {
+    traffic[i] = 0;
+  }
   
   lcd.clear();
-  lcd.print("Ready");
+  lcd.print("System Ready");
   delay(1000);
   
-  for(byte i = 0; i < POINTS_PER_WINDOW; i++) traffic[i] = 0;
-  
   lastSave = lastDecision = millis();
+  Serial.println("System ready");
 }
 
 void loop() {
   unsigned long now = millis();
   
-  bool inState = digitalRead(BTN_IN);
-  bool outState = digitalRead(BTN_OUT);
+  bool inState = digitalRead(IR_SENSOR_IN);
+  bool outState = digitalRead(IR_SENSOR_OUT);
   
-  if (inState && !lastIn && (now - lastInTime > 300)) {
-    count++;
-    totalCount++;
+  // Vehicle entering
+  if (inState == LOW && lastInState == HIGH && (now - lastInTime > 300)) {
+    currentCount++;
+    totalVehicles++;
     lastInTime = now;
+    
+    Serial.print("Vehicle IN. Total: ");
+    Serial.println(totalVehicles);
+    
+    tone(BUZZER_PIN, 1500);
+    delay(100);
+    noTone(BUZZER_PIN);
   }
   
-  if (outState && !lastOut && (now - lastOutTime > 300)) {
-    if (count > 0) count--;
-    if (totalCount > 0) totalCount--;
+  // Vehicle exiting
+  if (outState == LOW && lastOutState == HIGH && (now - lastOutTime > 300)) {
+    if (currentCount > 0) currentCount--;
+    if (totalVehicles > 0) totalVehicles--;
     lastOutTime = now;
+    
+    Serial.print("Vehicle OUT. Total: ");
+    Serial.println(totalVehicles);
+    
+    tone(BUZZER_PIN, 800);
+    delay(100);
+    noTone(BUZZER_PIN);
   }
   
-  lastIn = inState;
-  lastOut = outState;
+  lastInState = inState;
+  lastOutState = outState;
   
+  // Save count every 5 seconds
   if (now - lastSave >= STEP_INTERVAL) {
-    traffic[idx] = count;
-    idx = (idx + 1) % POINTS_PER_WINDOW;
-    count = 0;
+    traffic[idx] = currentCount;
+    Serial.print("Saved count at index ");
+    Serial.print(idx);
+    Serial.print(": ");
+    Serial.println(currentCount);
+    
+    idx = (idx + 1) % 12;
+    currentCount = 0;
     lastSave = now;
   }
   
+  // Make decision every 15 seconds
   if (now - lastDecision >= STRIDE_INTERVAL) {
     makeDecision();
     lastDecision = now;
-    totalCount = 0;
+    totalVehicles = 0;
   }
   
-  if (deciding && (now - decisionStart >= 5000)) {
-    deciding = false;
+  // Update display
+  if (now - lastDisplay >= 500) {
+    updateDisplay(now);
+    lastDisplay = now;
   }
   
-  static unsigned long lastDisp = 0;
-  if (!deciding && now - lastDisp >= 200) {
-    lcd.clear();
-    lcd.print("Vehicles: ");
-    lcd.print(totalCount);
-    lcd.setCursor(0, 1);
-    lcd.print("Next: ");
-    lcd.print((STRIDE_INTERVAL - (now - lastDecision)) / 1000);
-    lcd.print("s");
-    lastDisp = now;
-  }
-  
-  delay(10);
+  delay(50);
 }
 
 void makeDecision() {
-  int window[POINTS_PER_WINDOW];
-  byte dataPoints = min(idx, POINTS_PER_WINDOW);
+  Serial.println("Making decision");
   
-  if (dataPoints < POINTS_PER_WINDOW) {
-    for(byte i = 0; i < POINTS_PER_WINDOW; i++) {
-      window[i] = traffic[i % dataPoints];
-    }
-  } else {
-    for(byte i = 0; i < POINTS_PER_WINDOW; i++) {
-      byte actualIdx = (idx - POINTS_PER_WINDOW + i + POINTS_PER_WINDOW) % POINTS_PER_WINDOW;
-      window[i] = traffic[actualIdx];
-    }
+  int window[12];
+  for(int i = 0; i < 12; i++) {
+    byte actualIdx = (idx - 12 + i + 12) % 12;
+    window[i] = traffic[actualIdx];
   }
+  
+  Serial.print("Window: ");
+  for(int i = 0; i < 12; i++) {
+    Serial.print(window[i]);
+    if(i < 11) Serial.print(", ");
+  }
+  Serial.println();
   
   if (WiFi.status() != WL_CONNECTED) {
     Serial.println("WiFi not connected");
     lcd.clear();
     lcd.print("WiFi Error");
-    deciding = true;
-    decisionStart = millis();
-    delay(3000);
+    delay(2000);
     return;
   }
   
@@ -165,15 +206,14 @@ void makeDecision() {
   
   StaticJsonDocument<512> doc;
   JsonArray counts = doc.createNestedArray("counts");
-  
-  for(byte i = 0; i < POINTS_PER_WINDOW; i++) {
+  for(int i = 0; i < 12; i++) {
     counts.add(window[i]);
   }
   
   String jsonData;
   serializeJson(doc, jsonData);
   
-  Serial.println("Sending to server...");
+  Serial.println("Sending to server");
   int httpCode = http.POST(jsonData);
   
   if (httpCode == 200) {
@@ -181,12 +221,15 @@ void makeDecision() {
     Serial.print("Response: ");
     Serial.println(response);
     
-    StaticJsonDocument<256> responseDoc;
+    StaticJsonDocument<512> responseDoc;
     DeserializationError error = deserializeJson(responseDoc, response);
     
     if (error) {
-      Serial.print("JSON error: ");
+      Serial.print("Parse error: ");
       Serial.println(error.c_str());
+      lcd.clear();
+      lcd.print("Parse Error");
+      delay(2000);
       http.end();
       return;
     }
@@ -198,60 +241,63 @@ void makeDecision() {
     Serial.print("Prediction: ");
     Serial.print(prediction);
     Serial.print(" (");
-    Serial.print(confidence);
+    Serial.print(confidence, 1);
     Serial.println("%)");
     
     lcd.clear();
+    lcd.print(prediction);
+    lcd.setCursor(0, 1);
     lcd.print("Conf: ");
     lcd.print(confidence, 1);
     lcd.print("%");
-    lcd.setCursor(0, 1);
+    delay(2000);
     
     if (shouldOpen != gateOpen) {
-      lcd.print(shouldOpen ? "OPEN GATE" : "CLOSE GATE");
-      deciding = true;
-      decisionStart = millis();
-      delay(3000);
-      
       if (shouldOpen) {
         openGate();
       } else {
         closeGate();
       }
     } else {
-      lcd.print(gateOpen ? "KEEP OPEN" : "KEEP CLOSED");
-      deciding = true;
-      decisionStart = millis();
-      delay(3000);
+      lcd.clear();
+      lcd.print(gateOpen ? "Keep Open" : "Keep Closed");
+      delay(2000);
     }
+    
   } else {
-    Serial.print("HTTP Error: ");
+    Serial.print("Server error: ");
     Serial.println(httpCode);
     lcd.clear();
     lcd.print("Server Error");
     lcd.setCursor(0, 1);
     lcd.print("Code: ");
     lcd.print(httpCode);
-    deciding = true;
-    decisionStart = millis();
-    delay(3000);
+    delay(2000);
   }
   
   http.end();
+  Serial.println("Decision complete");
 }
 
 void openGate() {
-  lcd.clear();
-  lcd.print("OPENING GATE");
+  Serial.println("Opening gate");
   
-  for(byte i = 0; i < 3; i++) {
-    for(byte j = 0; j < 4; j++) digitalWrite(LEDS[j], HIGH);
-    tone(BUZZER, 1000);
-    delay(200);
-    for(byte j = 0; j < 4; j++) digitalWrite(LEDS[j], LOW);
-    noTone(BUZZER);
-    delay(200);
+  for(int i = 0; i < 5; i++) {
+    for(int j = 0; j < 4; j++) {
+      digitalWrite(LED_PINS[j], HIGH);
+    }
+    tone(BUZZER_PIN, 1000);
+    delay(300);
+    
+    for(int j = 0; j < 4; j++) {
+      digitalWrite(LED_PINS[j], LOW);
+    }
+    noTone(BUZZER_PIN);
+    delay(300);
   }
+  
+  lcd.clear();
+  lcd.print("Opening Gate");
   
   for(int pos = 0; pos <= 90; pos++) {
     servo.write(pos);
@@ -259,20 +305,28 @@ void openGate() {
   }
   
   gateOpen = true;
+  Serial.println("Gate opened");
 }
 
 void closeGate() {
-  lcd.clear();
-  lcd.print("CLOSING GATE");
+  Serial.println("Closing gate");
   
-  for(byte i = 0; i < 3; i++) {
-    for(byte j = 0; j < 4; j++) digitalWrite(LEDS[j], HIGH);
-    tone(BUZZER, 1000);
-    delay(200);
-    for(byte j = 0; j < 4; j++) digitalWrite(LEDS[j], LOW);
-    noTone(BUZZER);
-    delay(200);
+  for(int i = 0; i < 5; i++) {
+    for(int j = 0; j < 4; j++) {
+      digitalWrite(LED_PINS[j], HIGH);
+    }
+    tone(BUZZER_PIN, 1000);
+    delay(300);
+    
+    for(int j = 0; j < 4; j++) {
+      digitalWrite(LED_PINS[j], LOW);
+    }
+    noTone(BUZZER_PIN);
+    delay(300);
   }
+  
+  lcd.clear();
+  lcd.print("Closing Gate");
   
   for(int pos = 90; pos >= 0; pos--) {
     servo.write(pos);
@@ -280,4 +334,20 @@ void closeGate() {
   }
   
   gateOpen = false;
+  Serial.println("Gate closed");
+}
+
+void updateDisplay(unsigned long now) {
+  lcd.clear();
+  lcd.print("Vehicles: ");
+  lcd.print(totalVehicles);
+  
+  lcd.setCursor(0, 1);
+  lcd.print("Gate: ");
+  lcd.print(gateOpen ? "OPEN" : "CLOSED");
+  
+  unsigned long timeToNext = STRIDE_INTERVAL - (now - lastDecision);
+  lcd.setCursor(12, 1);
+  lcd.print(timeToNext / 1000);
+  lcd.print("s");
 }
