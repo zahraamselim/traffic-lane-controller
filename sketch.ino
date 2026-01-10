@@ -4,19 +4,16 @@
 #include <LiquidCrystal.h>
 #include <ESP32Servo.h>
 
-// WiFi Configuration
 const char* ssid = "YOUR_WIFI_SSID";
 const char* password = "YOUR_WIFI_PASSWORD";
 const char* serverUrl = "http://YOUR_SERVER_IP:5000/predict";
 
-// Hardware Pins
 const int IR_SENSOR_IN = 34;
 const int IR_SENSOR_OUT = 35;
 const int SERVO_PIN = 13;
 const int BUZZER_PIN = 12;
 const int LED_PINS[] = {14, 27, 26, 25};
 
-// LCD Pins
 const int RS = 19;
 const int E = 23;
 const int D4 = 18;
@@ -24,24 +21,14 @@ const int D5 = 17;
 const int D6 = 16;
 const int D7 = 15;
 
-// Timing Settings
-const unsigned long STEP_INTERVAL = 5000;
-const unsigned long STRIDE_INTERVAL = 15000;
-const unsigned long WINDOW_SIZE = 60000;
-const byte POINTS_PER_WINDOW = 12;
+const unsigned long DECISION_INTERVAL = 30000;
 
-// Objects
 LiquidCrystal lcd(RS, E, D4, D5, D6, D7);
 Servo servo;
 
-// Variables
-int traffic[12];
-byte idx = 0;
 int currentCount = 0;
-int totalVehicles = 0;
 bool gateOpen = false;
 
-unsigned long lastSave = 0;
 unsigned long lastDecision = 0;
 unsigned long lastDisplay = 0;
 
@@ -98,16 +85,13 @@ void setup() {
     delay(3000);
   }
   
-  for(int i = 0; i < 12; i++) {
-    traffic[i] = 0;
-  }
-  
   lcd.clear();
   lcd.print("System Ready");
   delay(1000);
   
-  lastSave = lastDecision = millis();
+  lastDecision = millis();
   Serial.println("System ready");
+  Serial.println("Making prediction every 30 seconds");
 }
 
 void loop() {
@@ -116,28 +100,24 @@ void loop() {
   bool inState = digitalRead(IR_SENSOR_IN);
   bool outState = digitalRead(IR_SENSOR_OUT);
   
-  // Vehicle entering
   if (inState == LOW && lastInState == HIGH && (now - lastInTime > 300)) {
     currentCount++;
-    totalVehicles++;
     lastInTime = now;
     
-    Serial.print("Vehicle IN. Total: ");
-    Serial.println(totalVehicles);
+    Serial.print("Vehicle IN. Count: ");
+    Serial.println(currentCount);
     
     tone(BUZZER_PIN, 1500);
     delay(100);
     noTone(BUZZER_PIN);
   }
   
-  // Vehicle exiting
   if (outState == LOW && lastOutState == HIGH && (now - lastOutTime > 300)) {
     if (currentCount > 0) currentCount--;
-    if (totalVehicles > 0) totalVehicles--;
     lastOutTime = now;
     
-    Serial.print("Vehicle OUT. Total: ");
-    Serial.println(totalVehicles);
+    Serial.print("Vehicle OUT. Count: ");
+    Serial.println(currentCount);
     
     tone(BUZZER_PIN, 800);
     delay(100);
@@ -147,27 +127,11 @@ void loop() {
   lastInState = inState;
   lastOutState = outState;
   
-  // Save count every 5 seconds
-  if (now - lastSave >= STEP_INTERVAL) {
-    traffic[idx] = currentCount;
-    Serial.print("Saved count at index ");
-    Serial.print(idx);
-    Serial.print(": ");
-    Serial.println(currentCount);
-    
-    idx = (idx + 1) % 12;
-    currentCount = 0;
-    lastSave = now;
-  }
-  
-  // Make decision every 15 seconds
-  if (now - lastDecision >= STRIDE_INTERVAL) {
+  if (now - lastDecision >= DECISION_INTERVAL) {
     makeDecision();
     lastDecision = now;
-    totalVehicles = 0;
   }
   
-  // Update display
   if (now - lastDisplay >= 500) {
     updateDisplay(now);
     lastDisplay = now;
@@ -178,19 +142,8 @@ void loop() {
 
 void makeDecision() {
   Serial.println("Making decision");
-  
-  int window[12];
-  for(int i = 0; i < 12; i++) {
-    byte actualIdx = (idx - 12 + i + 12) % 12;
-    window[i] = traffic[actualIdx];
-  }
-  
-  Serial.print("Window: ");
-  for(int i = 0; i < 12; i++) {
-    Serial.print(window[i]);
-    if(i < 11) Serial.print(", ");
-  }
-  Serial.println();
+  Serial.print("Current count: ");
+  Serial.println(currentCount);
   
   if (WiFi.status() != WL_CONNECTED) {
     Serial.println("WiFi not connected");
@@ -204,11 +157,9 @@ void makeDecision() {
   http.begin(serverUrl);
   http.addHeader("Content-Type", "application/json");
   
-  StaticJsonDocument<512> doc;
+  StaticJsonDocument<128> doc;
   JsonArray counts = doc.createNestedArray("counts");
-  for(int i = 0; i < 12; i++) {
-    counts.add(window[i]);
-  }
+  counts.add(currentCount);
   
   String jsonData;
   serializeJson(doc, jsonData);
@@ -339,14 +290,14 @@ void closeGate() {
 
 void updateDisplay(unsigned long now) {
   lcd.clear();
-  lcd.print("Vehicles: ");
-  lcd.print(totalVehicles);
+  lcd.print("Count: ");
+  lcd.print(currentCount);
   
   lcd.setCursor(0, 1);
   lcd.print("Gate: ");
   lcd.print(gateOpen ? "OPEN" : "CLOSED");
   
-  unsigned long timeToNext = STRIDE_INTERVAL - (now - lastDecision);
+  unsigned long timeToNext = DECISION_INTERVAL - (now - lastDecision);
   lcd.setCursor(12, 1);
   lcd.print(timeToNext / 1000);
   lcd.print("s");

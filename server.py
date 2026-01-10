@@ -29,18 +29,18 @@ def predict():
         
         print(f"Received counts: {vehicle_counts}")
         
-        if len(vehicle_counts) != 12:
-            print(f"ERROR: Expected 12 counts, got {len(vehicle_counts)}")
-            return jsonify({'error': 'Expected 12 vehicle counts'}), 400
+        if len(vehicle_counts) != 1:
+            print(f"ERROR: Expected 1 count, got {len(vehicle_counts)}")
+            return jsonify({'error': 'Expected 1 vehicle count'}), 400
         
-        # DEMO MODE: Amplify toy car counts and fix time
-        avg_count = np.mean(vehicle_counts) * 3
-        current_hour = 17  # Friday 5 PM rush hour
+        total_count = vehicle_counts[0]
+        scaled_total = total_count * 14.5
+        current_hour = 17
         current_day = 4
         
         print(f"\nData Processing:")
-        print(f"  Original average: {np.mean(vehicle_counts):.1f}")
-        print(f"  Amplified average (3x): {avg_count:.1f}")
+        print(f"  Raw count: {total_count}")
+        print(f"  Scaled count (14.5x): {scaled_total:.1f}")
         print(f"  Time: Friday 5:00 PM")
         
         is_morning_rush = 1 if 7 <= current_hour <= 9 else 0
@@ -55,7 +55,7 @@ def predict():
         print(f"  Weekend: {'Yes' if is_weekend else 'No'}")
         
         features = np.array([[
-            avg_count,
+            scaled_total,
             current_hour,
             current_day,
             is_morning_rush,
@@ -82,8 +82,7 @@ def predict():
         print(f"\nAll Class Probabilities:")
         for i, class_name in enumerate(label_encoder.classes_):
             prob = predictions[0][i] * 100
-            bar = '█' * int(prob / 5)
-            print(f"  {class_name:10s} {prob:5.1f}% {bar}")
+            print(f"  {class_name:10s} {prob:5.1f}%")
         
         return jsonify({
             'prediction': prediction,
@@ -91,9 +90,8 @@ def predict():
             'open_lane': should_open,
             'timestamp': datetime.now().isoformat(),
             'stats': {
-                'avg_count': float(round(avg_count, 1)),
-                'min_count': int(np.min(vehicle_counts)),
-                'max_count': int(np.max(vehicle_counts)),
+                'raw_count': int(total_count),
+                'scaled_count': float(round(scaled_total, 1)),
                 'hour': current_hour,
                 'day_of_week': current_day,
                 'is_morning_rush': bool(is_morning_rush),
@@ -118,13 +116,14 @@ def health():
     })
 
 if __name__ == '__main__':
-    print(f"\nTraffic Prediction Server (DEMO MODE)")
+    print(f"\nTraffic Prediction Server")
     print(f"Model Type: {model_config['model_type']}")
     print(f"Classes: {', '.join(label_encoder.classes_)}")
     print(f"Test Accuracy: {model_config['test_accuracy']:.2%}")
     print(f"\nDemo Settings:")
-    print(f"  Toy car count multiplier: 3x")
+    print(f"  Prediction interval: 30 seconds")
+    print(f"  Scale factor: 14.5x")
     print(f"  Fixed time: Friday 5 PM (rush hour)")
-    print(f"  2-3 toy cars should trigger heavy traffic")
+    print(f"  10 toy cars in 30 seconds will trigger high traffic")
     print(f"\nServer running on http://0.0.0.0:5000\n")
     app.run(host='0.0.0.0', port=5000, debug=False)
