@@ -68,7 +68,61 @@ In this example, your IP is `192.168.1.100`
 
 ### Step 2: Setup the Server
 
+#### Option A: Using Virtual Environment (Recommended)
+
+A virtual environment keeps your project dependencies isolated from other Python projects.
+
+1. Open Command Prompt or PowerShell in the project folder
+
+2. If using PowerShell, you may need to enable script execution first (one time only):
+
+```
+Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned
+```
+
+3. Create virtual environment:
+
+```
+python -m venv venv
+```
+
+4. Activate virtual environment:
+
+```
+venv\Scripts\activate
+```
+
+You should see `(venv)` at the beginning of your command prompt line.
+
+5. Install dependencies:
+
+```
+pip install -r requirements.txt
+```
+
+6. Start the server:
+
+```
+python server.py
+```
+
+7. To deactivate virtual environment later (when you're done):
+
+```
+deactivate
+```
+
+**Next time you want to run the server:**
+
+```
+venv\Scripts\activate
+python server.py
+```
+
+#### Option B: Global Installation (Not Recommended)
+
 1. Open Command Prompt in the project folder
+
 2. Install Python dependencies:
 
 ```
@@ -81,18 +135,32 @@ pip install -r requirements.txt
 python server.py
 ```
 
-4. You should see:
+#### Verify Server is Running
+
+You should see:
 
 ```
+Loading model...
+Model loaded: SimpleNN
+Features: ['Total', 'Hour', 'DayNum', 'is_morning_rush', 'is_evening_rush', 'is_night', 'is_weekend']
+Classes: ['heavy' 'high' 'normal' 'moderate']
+Test Accuracy: 0.XXXX
+
 Traffic Prediction Server
 Model Type: SimpleNN
 Classes: heavy, high, normal, moderate
 Test Accuracy: XX.XX%
 
+Demo Settings:
+  Prediction interval: 30 seconds
+  Scale factor: 14.5x
+  Fixed time: Friday 5 PM (rush hour)
+  10 toy cars in 30 seconds will trigger high traffic
+
 Server running on http://0.0.0.0:5000
 ```
 
-5. Keep this window open
+Keep this window open while using the system.
 
 ### Step 3: Configure the ESP32 Sketch
 
@@ -145,6 +213,7 @@ Connecting to WiFi...
 WiFi connected
 IP: 192.168.X.X
 System ready
+Making prediction every 30 seconds
 ```
 
 5. Wave your hand over the IR sensors
@@ -152,11 +221,12 @@ System ready
 
 ## How It Works
 
-1. **Data Collection**: ESP32 counts vehicles every 5 seconds using IR sensors
-2. **Data Window**: Stores 12 counts (60 seconds of traffic data)
-3. **Prediction**: Every 15 seconds, sends all 12 counts to server via WiFi
-4. **Classification**: ML model analyzes data and predicts traffic level
-5. **Action**: If traffic is heavy or high, opens the extra lane
+1. **Data Collection**: ESP32 continuously counts vehicles using IR sensors
+2. **Vehicle Tracking**: Entry sensor increments count, exit sensor decrements
+3. **Prediction**: Every 30 seconds, sends current count to server via WiFi
+4. **Scaling**: Server multiplies count by 14.5x to match training data range
+5. **Classification**: ML model analyzes scaled data and predicts traffic level
+6. **Action**: If traffic is heavy or high, opens the extra lane
 
 ## Traffic Classes
 
@@ -166,6 +236,15 @@ The model classifies traffic into 4 levels:
 - **Moderate**: Medium traffic (lane closed, monitoring)
 - **Heavy**: High traffic (lane opens)
 - **High**: Very high traffic (lane stays open)
+
+## Demo Mode
+
+The system is configured for toy car demonstrations:
+
+- Server uses fixed time: Friday 5 PM (rush hour)
+- Count scaled by 14.5x (10 toy cars = 145 scaled vehicles)
+- 10 toy cars in 30 seconds triggers "high" traffic prediction
+- Gate opens automatically
 
 ## Project Structure
 
@@ -184,8 +263,48 @@ traffic-system/
 ├── server.py              # Flask prediction server
 ├── requirements.txt       # Python dependencies
 ├── sketch.ino            # ESP32 main code
-└── wokwi.json            # Wokwi simulator config
+└── venv/                 # Virtual environment (after setup)
 ```
+
+## Troubleshooting
+
+### Server Issues
+
+**Problem**: "ModuleNotFoundError"
+**Solution**: Make sure virtual environment is activated and run `pip install -r requirements.txt`
+
+**Problem**: "Address already in use"
+**Solution**: Another program is using port 5000. Either close it or change the port in server.py
+
+**Problem**: Can't access from ESP32
+**Solution**:
+
+- Check Windows Firewall settings
+- Make sure both devices on same WiFi network
+- Verify IP address with `ipconfig`
+
+### ESP32 Issues
+
+**Problem**: WiFi won't connect
+**Solution**:
+
+- Check SSID and password (case-sensitive)
+- ESP32 only supports 2.4GHz WiFi, not 5GHz
+- Move closer to router
+
+**Problem**: Can't reach server
+**Solution**:
+
+- Server must be running
+- Check server IP address in sketch
+- Test server health: open browser to `http://localhost:5000/health`
+
+**Problem**: IR sensors not detecting
+**Solution**:
+
+- Check wiring (VCC, GND, Signal pins)
+- Adjust sensitivity potentiometer on sensor
+- Verify sensor LED lights up when triggered
 
 ## Getting Help
 
@@ -199,14 +318,36 @@ Check the documentation files:
 
 When everything works correctly:
 
-1. LCD displays current vehicle count
-2. Every 15 seconds, prediction appears on screen
+1. LCD displays current vehicle count and countdown
+2. Every 30 seconds, prediction appears on screen
 3. If heavy/high traffic detected:
    - LEDs flash 5 times
    - Buzzer beeps with LEDs
    - Servo rotates to open gate
    - LCD shows "Opening Gate"
 4. Serial Monitor logs all activity
+
+## Quick Start Commands
+
+```bash
+# First time setup (PowerShell users run this first)
+Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned
+
+# Create and setup virtual environment
+python -m venv venv
+venv\Scripts\activate
+pip install -r requirements.txt
+
+# Run server (after first time)
+venv\Scripts\activate
+python server.py
+
+# Test server
+curl http://localhost:5000/health
+
+# Deactivate when done
+deactivate
+```
 
 ## License
 
